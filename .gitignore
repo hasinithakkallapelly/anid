@@ -1,0 +1,11 @@
+# Xcode / XcodeGen
+Anid.xcodeproj/
+Generated/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
