@@ -6,6 +6,7 @@ struct IdeaDetailView: View {
     @Environment(\.modelContext) private var modelContext
 
     @AppStorage(SettingsKeys.model) private var modelRaw = ClaudeModel.opus5.rawValue
+    @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
     @State private var isProcessing = false
     @State private var isSending = false
     @State private var errorMessage: String?
@@ -129,10 +130,26 @@ struct IdeaDetailView: View {
         isProcessing = true
         defer { isProcessing = false }
         do {
-            let result = try await ClaudeService.breakDown(idea: idea, apiKey: apiKey, model: selectedModel)
+            let knownPlaces = SettingsKeys.parsePlaces(knownPlacesRaw)
+            let result = try await ClaudeService.breakDown(
+                idea: idea,
+                apiKey: apiKey,
+                model: selectedModel,
+                knownPlaces: knownPlaces
+            )
             idea.summary = result.summary
             for draft in result.todoItems {
-                let item = TodoItem(text: draft.text, notes: draft.notes, dueDate: draft.dueDate, idea: idea)
+                // Defensive re-check: only trust a placeName Claude returned if it's
+                // still one of the user's declared places, in case they edited the
+                // list between requests or the model didn't follow instructions.
+                let placeName = draft.placeName.flatMap { knownPlaces.contains($0) ? $0 : nil }
+                let item = TodoItem(
+                    text: draft.text,
+                    notes: draft.notes,
+                    dueDate: placeName == nil ? draft.dueDate : nil,
+                    placeName: placeName,
+                    idea: idea
+                )
                 modelContext.insert(item)
             }
             idea.status = .processed

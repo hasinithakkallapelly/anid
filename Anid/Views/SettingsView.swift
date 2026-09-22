@@ -2,11 +2,19 @@ import SwiftUI
 
 enum SettingsKeys {
     static let model = "claudeModel"
+    static let knownPlaces = "knownRemindMePlaces"
+
+    static func parsePlaces(_ raw: String) -> [String] {
+        raw.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
 }
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(SettingsKeys.model) private var modelRaw = ClaudeModel.opus5.rawValue
+    @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
 
     @State private var apiKeyInput = ""
     @State private var hasStoredKey = false
@@ -47,6 +55,13 @@ struct SettingsView: View {
                     }
                 } footer: {
                     Text("Requires the Remind Me app on this device, with its reminder-import link support added — see Docs/RemindMeIntegration.md in this project.")
+                }
+
+                Section("Your Remind Me Places") {
+                    TextField("Room, Gym, Kitchen, Office", text: $knownPlacesRaw)
+                        .textInputAutocapitalization(.words)
+                } footer: {
+                    Text("Comma-separated names of the places you've already saved in Remind Me — spelled exactly as they are there. Anid can't read Remind Me's place list directly, so when Claude thinks a step belongs at a place (like a laptop task → \"Room\") it can only pick from names you list here, and Remind Me matches reminders to real places by exact name.")
                 }
             }
             .navigationTitle("Settings")

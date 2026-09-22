@@ -26,7 +26,7 @@ struct TodoRowView: View {
                         .font(.caption2)
                         .foregroundStyle(.green)
                 } else {
-                    DueDateControl(item: item)
+                    TriggerControl(item: item)
                 }
             }
         }
@@ -34,23 +34,66 @@ struct TodoRowView: View {
     }
 }
 
-private struct DueDateControl: View {
+/// Lets the user confirm or override how Claude classified a step: fire at
+/// a place (geofence, in Remind Me), fire at a time, or no reminder trigger
+/// at all — just a plain step. Claude's guess pre-fills this but the user
+/// has the final say, since Anid can't verify a suggested place actually
+/// exists in Remind Me.
+private struct TriggerControl: View {
     @Bindable var item: TodoItem
-    @State private var hasDueDate: Bool
+    @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
+    @State private var mode: TriggerMode
+
+    private enum TriggerMode: String, CaseIterable {
+        case none = "None"
+        case time = "Time"
+        case place = "Place"
+    }
 
     init(item: TodoItem) {
         self.item = item
-        _hasDueDate = State(initialValue: item.dueDate != nil)
+        if item.placeName != nil {
+            _mode = State(initialValue: .place)
+        } else if item.dueDate != nil {
+            _mode = State(initialValue: .time)
+        } else {
+            _mode = State(initialValue: .none)
+        }
+    }
+
+    private var knownPlaces: [String] {
+        SettingsKeys.parsePlaces(knownPlacesRaw)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Toggle("Due date", isOn: $hasDueDate.animation())
-                .font(.caption)
-                .onChange(of: hasDueDate) { _, newValue in
-                    item.dueDate = newValue ? (item.dueDate ?? Date()) : nil
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("Trigger", selection: $mode) {
+                ForEach(TriggerMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
                 }
-            if hasDueDate {
+            }
+            .pickerStyle(.segmented)
+            .font(.caption)
+            .onChange(of: mode) { _, newMode in
+                switch newMode {
+                case .none:
+                    item.dueDate = nil
+                    item.placeName = nil
+                case .time:
+                    item.placeName = nil
+                    if item.dueDate == nil { item.dueDate = Date() }
+                case .place:
+                    item.dueDate = nil
+                    if item.placeName == nil || !knownPlaces.contains(item.placeName!) {
+                        item.placeName = knownPlaces.first
+                    }
+                }
+            }
+
+            switch mode {
+            case .none:
+                EmptyView()
+            case .time:
                 DatePicker(
                     "",
                     selection: Binding(
@@ -61,6 +104,22 @@ private struct DueDateControl: View {
                 )
                 .labelsHidden()
                 .datePickerStyle(.compact)
+            case .place:
+                if knownPlaces.isEmpty {
+                    Text("Add your Remind Me place names in Settings to use this.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Place", selection: Binding(
+                        get: { item.placeName ?? knownPlaces.first ?? "" },
+                        set: { item.placeName = $0 }
+                    )) {
+                        ForEach(knownPlaces, id: \.self) { place in
+                            Text(place).tag(place)
+                        }
+                    }
+                    .font(.caption)
+                }
             }
         }
     }

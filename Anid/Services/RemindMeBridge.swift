@@ -17,6 +17,7 @@ enum RemindMeBridge {
     private struct ExportItem: Encodable {
         let text: String
         let dueDate: String?
+        let placeName: String?
     }
 
     static var isRemindMeInstalled: Bool {
@@ -29,7 +30,11 @@ enum RemindMeBridge {
 
         let isoFormatter = ISO8601DateFormatter()
         let payload = items.map { item in
-            ExportItem(text: item.text, dueDate: item.dueDate.map { isoFormatter.string(from: $0) })
+            ExportItem(
+                text: item.text,
+                dueDate: item.dueDate.map { isoFormatter.string(from: $0) },
+                placeName: item.placeName
+            )
         }
         let jsonData = try JSONEncoder().encode(payload)
         let base64 = jsonData.base64EncodedString()

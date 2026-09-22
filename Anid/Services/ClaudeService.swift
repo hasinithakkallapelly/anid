@@ -28,6 +28,7 @@ struct IdeaBreakdown {
         let text: String
         let notes: String?
         let dueDate: Date?
+        let placeName: String?
     }
 }
 
@@ -63,7 +64,12 @@ enum ClaudeServiceError: LocalizedError {
 enum ClaudeService {
     private static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
 
-    static func breakDown(idea: Idea, apiKey: String, model: ClaudeModel) async throws -> IdeaBreakdown {
+    static func breakDown(
+        idea: Idea,
+        apiKey: String,
+        model: ClaudeModel,
+        knownPlaces: [String]
+    ) async throws -> IdeaBreakdown {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else {
             throw ClaudeServiceError.missingAPIKey
@@ -74,7 +80,9 @@ enum ClaudeService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(trimmedKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(idea: idea, model: model))
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: requestBody(idea: idea, model: model, knownPlaces: knownPlaces)
+        )
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -98,7 +106,7 @@ enum ClaudeService {
             let isoFormatter = ISO8601DateFormatter()
             let todoItems = parsed.todoItems.map { item -> IdeaBreakdown.TodoDraft in
                 let due = item.dueDate.flatMap { isoFormatter.date(from: $0) }
-                return IdeaBreakdown.TodoDraft(text: item.text, notes: item.notes, dueDate: due)
+                return IdeaBreakdown.TodoDraft(text: item.text, notes: item.notes, dueDate: due, placeName: item.placeName)
             }
             return IdeaBreakdown(summary: parsed.summary, todoItems: todoItems)
         } catch {
@@ -106,11 +114,16 @@ enum ClaudeService {
         }
     }
 
-    private static func requestBody(idea: Idea, model: ClaudeModel) -> [String: Any] {
+    private static func requestBody(idea: Idea, model: ClaudeModel, knownPlaces: [String]) -> [String: Any] {
         let today = ISO8601DateFormatter().string(from: Date())
         var userContent = "Today's date: \(today)\n\nIdea / note:\n\(idea.rawText)"
         if let link = idea.sourceURLString, !link.isEmpty {
             userContent += "\n\nSource link: \(link)"
+        }
+        if knownPlaces.isEmpty {
+            userContent += "\n\nThe user hasn't listed any saved Remind Me places yet, so never set placeName — leave every step's placeName null."
+        } else {
+            userContent += "\n\nThe user's saved Remind Me places: \(knownPlaces.joined(separator: ", ")). Only use one of these exact names for placeName — never invent a new one."
         }
 
         let nullableString: [String: Any] = [
@@ -147,9 +160,10 @@ enum ClaudeService {
                                     "properties": [
                                         "text": ["type": "string"],
                                         "notes": nullableString,
-                                        "dueDate": nullableDate
+                                        "dueDate": nullableDate,
+                                        "placeName": nullableString
                                     ],
-                                    "required": ["text", "notes", "dueDate"],
+                                    "required": ["text", "notes", "dueDate", "placeName"],
                                     "additionalProperties": false
                                 ]
                             ]
@@ -177,9 +191,18 @@ enum ClaudeService {
     - "todoItems" is 3-7 concrete, ordered action steps — not vague advice. \
     E.g. "Read the official docs at X" or "Install X and run the quickstart" \
     rather than "learn more about X".
-    - Only set a dueDate when the note implies real urgency or a specific \
-    timeframe (e.g. "this weekend", "before Friday"). Otherwise leave it \
-    null — most ideas don't need an artificial deadline.
+    - Each step gets at most one reminder trigger: either a dueDate (time) \
+    or a placeName (place) — never both, and most steps need neither.
+    - Set placeName only when the step is naturally tied to being physically \
+    somewhere specific — e.g. a step that needs a laptop/desk setup fits a \
+    "Room" or "Office" place; a step that needs gym equipment fits "Gym". \
+    Only use one of the user's listed places (given below), matched exactly; \
+    if none of their places fit the step, leave placeName null rather than \
+    inventing one.
+    - Set a dueDate instead when the note implies real urgency or a specific \
+    timeframe (e.g. "this weekend", "before Friday") and the step isn't \
+    place-bound. Most ideas don't need an artificial deadline — leave it \
+    null unless the timeframe is actually implied.
     - dueDate, when set, must be a full ISO 8601 date-time string, computed \
     relative to today's date given above.
     - notes may add one short clarifying detail per step (a link, a command, \
@@ -199,6 +222,7 @@ enum ClaudeService {
             let text: String
             let notes: String?
             let dueDate: String?
+            let placeName: String?
         }
     }
 }

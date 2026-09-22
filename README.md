@@ -12,13 +12,30 @@ action list, then send selected steps to your
   easily" part, and it works with zero setup.
 - **Break down**: open a saved idea and tap "Break This Down". This sends
   the idea's text (and link, if any) to the Claude API, which returns a
-  short summary plus 3-7 concrete action steps, each optionally with a
-  suggested due date.
+  short summary plus 3-7 concrete action steps. Each step gets at most one
+  reminder trigger, and Claude picks which kind fits: a **due date** for
+  steps with real urgency ("finish this by the weekend"), or a **place**
+  for steps tied to being somewhere specific — a laptop-only step suggests
+  "Room", a step needing gym equipment suggests "Gym" — matched against the
+  place names you've listed in Settings. Most steps get neither and are
+  just plain checklist items. You can override any of Claude's guesses
+  per-step before sending.
 - **Send to Remind Me**: pick which steps to send, tap the button. Anid
   hands them to Remind Me via a `remindme://` URL — see
   [`Docs/RemindMeIntegration.md`](Docs/RemindMeIntegration.md) for what that
   needs on the Remind Me side (**not yet applied there** — read that file
   before expecting this to work end-to-end).
+
+## Important limitation: Anid can't see your actual saved places
+
+Anid and Remind Me are separate apps with separate databases — Anid has no
+way to read the list of places you've already saved in Remind Me (no shared
+API between them). So in Anid's Settings, you list your place names once
+yourself (e.g. "Room, Gym, Kitchen"), spelled exactly as they are in Remind
+Me. Claude only ever picks from that list, and Remind Me matches reminders
+to real places by exact name — a typo or a place you add later in Remind Me
+but forget to add here just means that step falls back to no trigger (or
+you can pick a different place manually on the step itself).
 
 ## Important limitation: reels aren't read automatically
 
@@ -50,7 +67,10 @@ been built/run yet — same situation as the remind-me repo it talks to.
    [console.anthropic.com](https://console.anthropic.com) → API Keys.
    Usage is billed per token directly by Anthropic (no OpenAI account
    needed); a typical idea breakdown costs a few cents at most.
-6. Apply the patch in `Docs/RemindMeIntegration.md` to your `remind-me`
+6. Also in Settings, type in the names of the places you've already saved
+   in Remind Me (comma-separated, spelled exactly as they are there) — see
+   "Anid can't see your actual saved places" above.
+7. Apply the patch in `Docs/RemindMeIntegration.md` to your `remind-me`
    checkout, rebuild that app too, and install both on the same device.
 
 ## Project layout
@@ -60,7 +80,7 @@ Anid/
   AnidApp.swift              # App entry point, SwiftData container setup
   Models/
     Idea.swift                # SwiftData model: raw text, link, status, summary
-    TodoItem.swift             # SwiftData model: step text, notes, due date
+    TodoItem.swift             # SwiftData model: step text, notes, due date/place trigger
   Services/
     ClaudeService.swift        # Claude Messages API client (raw HTTPS, no SDK)
     KeychainService.swift      # Secure storage for the Anthropic API key
@@ -69,8 +89,8 @@ Anid/
     ContentView.swift          # Idea list
     IdeaCaptureView.swift      # Fast-capture sheet
     IdeaDetailView.swift       # Breakdown + send-to-Remind-Me flow
-    TodoRowView.swift          # Per-step row (select + optional due date)
-    SettingsView.swift         # API key, model choice, Remind Me status
+    TodoRowView.swift          # Per-step row (select + trigger: none/time/place)
+    SettingsView.swift         # API key, model choice, known Remind Me places
 project.yml                    # XcodeGen spec to produce the .xcodeproj
 Docs/
   RemindMeIntegration.md       # Patch to apply to the remind-me repo
