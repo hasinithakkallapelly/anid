@@ -1,21 +1,19 @@
 import Foundation
 
-/// Models available for breaking down an idea. Opus 5 gives the most
-/// thorough breakdowns; Sonnet 5 / Haiku 4.5 cost less per idea — the user
-/// picks in Settings, since that's a cost/quality tradeoff only they should
-/// make.
-enum ClaudeModel: String, CaseIterable, Identifiable {
-    case opus5 = "claude-opus-5"
-    case sonnet5 = "claude-sonnet-5"
-    case haiku45 = "claude-haiku-4-5"
+/// Models available for breaking down an idea, via Google's Gemini API free
+/// tier (no card, no expiry, ~1,500 requests/day as of writing). Both are
+/// free — Flash gives more thorough breakdowns, Flash-Lite responds faster
+/// and uses less of the daily quota.
+enum GeminiModel: String, CaseIterable, Identifiable {
+    case flash = "gemini-2.5-flash"
+    case flashLite = "gemini-2.5-flash-lite"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .opus5: return "Opus 5 (best quality, highest cost)"
-        case .sonnet5: return "Sonnet 5 (balanced)"
-        case .haiku45: return "Haiku 4.5 (fastest, cheapest)"
+        case .flash: return "Gemini 2.5 Flash (more thorough)"
+        case .flashLite: return "Gemini 2.5 Flash-Lite (fastest)"
         }
     }
 }
@@ -32,73 +30,82 @@ struct IdeaBreakdown {
     }
 }
 
-enum ClaudeServiceError: LocalizedError {
+enum GeminiServiceError: LocalizedError {
     case missingAPIKey
     case invalidHTTPResponse
     case httpError(status: Int, body: String)
-    case refusal
+    case blocked(reason: String)
     case emptyContent
     case decodingFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            return "No Claude API key set. Add one in Settings."
+            return "No Gemini API key set. Add one in Settings."
         case .invalidHTTPResponse:
-            return "Unexpected response from the Claude API."
+            return "Unexpected response from the Gemini API."
         case .httpError(let status, let body):
-            return "Claude API error (\(status)): \(body)"
-        case .refusal:
-            return "Claude declined to process this idea."
+            return "Gemini API error (\(status)): \(body)"
+        case .blocked(let reason):
+            return "Gemini declined to process this idea (\(reason))."
         case .emptyContent:
-            return "Claude returned an empty response."
+            return "Gemini returned an empty response."
         case .decodingFailed(let detail):
-            return "Couldn't parse Claude's response: \(detail)"
+            return "Couldn't parse Gemini's response: \(detail)"
         }
     }
 }
 
-/// Talks to the Claude Messages API directly over HTTPS — there's no
-/// official Anthropic SDK for Swift, so this is raw URLSession + JSON
-/// rather than a client library.
-enum ClaudeService {
-    private static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
-
+/// Talks to the Gemini API directly over HTTPS — there's no official Google
+/// SDK for Swift, so this is raw URLSession + JSON rather than a client
+/// library.
+enum GeminiService {
     static func breakDown(
         idea: Idea,
         apiKey: String,
-        model: ClaudeModel,
+        model: GeminiModel,
         knownPlaces: [String]
     ) async throws -> IdeaBreakdown {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else {
-            throw ClaudeServiceError.missingAPIKey
+            throw GeminiServiceError.missingAPIKey
+        }
+        guard let endpoint = URL(
+            string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.rawValue):generateContent"
+        ) else {
+            throw GeminiServiceError.invalidHTTPResponse
         }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(trimmedKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue(trimmedKey, forHTTPHeaderField: "x-goog-api-key")
         request.httpBody = try JSONSerialization.data(
-            withJSONObject: requestBody(idea: idea, model: model, knownPlaces: knownPlaces)
+            withJSONObject: requestBody(idea: idea, knownPlaces: knownPlaces)
         )
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw ClaudeServiceError.invalidHTTPResponse
+            throw GeminiServiceError.invalidHTTPResponse
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
-            throw ClaudeServiceError.httpError(status: httpResponse.statusCode, body: body)
+            throw GeminiServiceError.httpError(status: httpResponse.statusCode, body: body)
         }
 
-        let decoded = try JSONDecoder().decode(MessagesResponse.self, from: data)
-        if decoded.stop_reason == "refusal" {
-            throw ClaudeServiceError.refusal
+        let decoded = try JSONDecoder().decode(GenerateContentResponse.self, from: data)
+
+        if let blockReason = decoded.promptFeedback?.blockReason {
+            throw GeminiServiceError.blocked(reason: blockReason)
         }
-        guard let text = decoded.content.first(where: { $0.type == "text" })?.text, !text.isEmpty else {
-            throw ClaudeServiceError.emptyContent
+        guard let candidate = decoded.candidates?.first else {
+            throw GeminiServiceError.emptyContent
+        }
+        if let finishReason = candidate.finishReason, finishReason != "STOP" {
+            throw GeminiServiceError.blocked(reason: finishReason)
+        }
+        guard let text = candidate.content?.parts.first(where: { $0.text != nil })?.text, !text.isEmpty else {
+            throw GeminiServiceError.emptyContent
         }
 
         do {
@@ -110,11 +117,11 @@ enum ClaudeService {
             }
             return IdeaBreakdown(summary: parsed.summary, todoItems: todoItems)
         } catch {
-            throw ClaudeServiceError.decodingFailed(error.localizedDescription)
+            throw GeminiServiceError.decodingFailed(error.localizedDescription)
         }
     }
 
-    private static func requestBody(idea: Idea, model: ClaudeModel, knownPlaces: [String]) -> [String: Any] {
+    private static func requestBody(idea: Idea, knownPlaces: [String]) -> [String: Any] {
         let today = ISO8601DateFormatter().string(from: Date())
         var userContent = "Today's date: \(today)\n\nIdea / note:\n\(idea.rawText)"
         if let link = idea.sourceURLString, !link.isEmpty {
@@ -126,51 +133,39 @@ enum ClaudeService {
             userContent += "\n\nThe user's saved Remind Me places: \(knownPlaces.joined(separator: ", ")). Only use one of these exact names for placeName — never invent a new one."
         }
 
-        let nullableString: [String: Any] = [
-            "anyOf": [
-                ["type": "string"],
-                ["type": "null"]
-            ]
-        ]
-        let nullableDate: [String: Any] = [
-            "anyOf": [
-                ["type": "string", "format": "date-time"],
-                ["type": "null"]
-            ]
-        ]
+        // Gemini's response_schema dialect uses uppercase type names and a
+        // `nullable` flag rather than JSON Schema's `anyOf`-with-null.
+        let nullableString: [String: Any] = ["type": "STRING", "nullable": true]
 
         return [
-            "model": model.rawValue,
-            "max_tokens": 4096,
-            "system": systemPrompt,
-            "messages": [
-                ["role": "user", "content": userContent]
+            "contents": [
+                ["role": "user", "parts": [["text": userContent]]]
             ],
-            "output_config": [
-                "format": [
-                    "type": "json_schema",
-                    "schema": [
-                        "type": "object",
-                        "properties": [
-                            "summary": ["type": "string"],
-                            "todoItems": [
-                                "type": "array",
-                                "items": [
-                                    "type": "object",
-                                    "properties": [
-                                        "text": ["type": "string"],
-                                        "notes": nullableString,
-                                        "dueDate": nullableDate,
-                                        "placeName": nullableString
-                                    ],
-                                    "required": ["text", "notes", "dueDate", "placeName"],
-                                    "additionalProperties": false
-                                ]
+            "systemInstruction": [
+                "parts": [["text": systemPrompt]]
+            ],
+            "generationConfig": [
+                "maxOutputTokens": 4096,
+                "responseMimeType": "application/json",
+                "responseSchema": [
+                    "type": "OBJECT",
+                    "properties": [
+                        "summary": ["type": "STRING"],
+                        "todoItems": [
+                            "type": "ARRAY",
+                            "items": [
+                                "type": "OBJECT",
+                                "properties": [
+                                    "text": ["type": "STRING"],
+                                    "notes": nullableString,
+                                    "dueDate": nullableString,
+                                    "placeName": nullableString
+                                ],
+                                "required": ["text", "notes", "dueDate", "placeName"]
                             ]
-                        ],
-                        "required": ["summary", "todoItems"],
-                        "additionalProperties": false
-                    ]
+                        ]
+                    ],
+                    "required": ["summary", "todoItems"]
                 ]
             ]
         ]
@@ -207,12 +202,27 @@ enum ClaudeService {
     relative to today's date given above.
     - notes may add one short clarifying detail per step (a link, a command, \
     a tip); leave it null if there's nothing to add.
+    - Respond with only the JSON object described by the response schema — \
+    no surrounding prose.
     """
 
-    private struct MessagesResponse: Decodable {
-        let content: [ContentBlock]
-        let stop_reason: String?
-        struct ContentBlock: Decodable { let type: String; let text: String? }
+    private struct GenerateContentResponse: Decodable {
+        let candidates: [Candidate]?
+        let promptFeedback: PromptFeedback?
+
+        struct Candidate: Decodable {
+            let content: Content?
+            let finishReason: String?
+        }
+        struct Content: Decodable {
+            let parts: [Part]
+        }
+        struct Part: Decodable {
+            let text: String?
+        }
+        struct PromptFeedback: Decodable {
+            let blockReason: String?
+        }
     }
 
     private struct BreakdownJSON: Decodable {

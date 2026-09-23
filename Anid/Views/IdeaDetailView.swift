@@ -5,7 +5,7 @@ struct IdeaDetailView: View {
     @Bindable var idea: Idea
     @Environment(\.modelContext) private var modelContext
 
-    @AppStorage(SettingsKeys.model) private var modelRaw = ClaudeModel.opus5.rawValue
+    @AppStorage(SettingsKeys.model) private var modelRaw = GeminiModel.flash.rawValue
     @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
     @State private var isProcessing = false
     @State private var isSending = false
@@ -13,8 +13,8 @@ struct IdeaDetailView: View {
     @State private var selectedItemIDs: Set<UUID> = []
     @State private var isPresentingSettings = false
 
-    private var selectedModel: ClaudeModel {
-        ClaudeModel(rawValue: modelRaw) ?? .opus5
+    private var selectedModel: GeminiModel {
+        GeminiModel(rawValue: modelRaw) ?? .flash
     }
 
     private var hasAPIKey: Bool {
@@ -59,7 +59,7 @@ struct IdeaDetailView: View {
                     .disabled(isProcessing || !hasAPIKey)
 
                     if !hasAPIKey {
-                        Button("Add a Claude API key in Settings") {
+                        Button("Add a Gemini API key in Settings") {
                             isPresentingSettings = true
                         }
                         .font(.caption)
@@ -124,14 +124,14 @@ struct IdeaDetailView: View {
 
     private func breakDown() async {
         guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-            errorMessage = ClaudeServiceError.missingAPIKey.localizedDescription
+            errorMessage = GeminiServiceError.missingAPIKey.localizedDescription
             return
         }
         isProcessing = true
         defer { isProcessing = false }
         do {
             let knownPlaces = SettingsKeys.parsePlaces(knownPlacesRaw)
-            let result = try await ClaudeService.breakDown(
+            let result = try await GeminiService.breakDown(
                 idea: idea,
                 apiKey: apiKey,
                 model: selectedModel,
@@ -139,7 +139,7 @@ struct IdeaDetailView: View {
             )
             idea.summary = result.summary
             for draft in result.todoItems {
-                // Defensive re-check: only trust a placeName Claude returned if it's
+                // Defensive re-check: only trust a placeName Gemini returned if it's
                 // still one of the user's declared places, in case they edited the
                 // list between requests or the model didn't follow instructions.
                 let placeName = draft.placeName.flatMap { knownPlaces.contains($0) ? $0 : nil }

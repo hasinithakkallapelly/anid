@@ -25,7 +25,7 @@ struct IdeaCaptureView: View {
                 } header: {
                     Text("Reel or article link (optional)")
                 } footer: {
-                    Text("Paste the link and add a line about what it's about. Claude can't read a reel from the link alone — there's no way to fetch someone else's reel content automatically — so what you type above is what actually gets processed.")
+                    Text("Paste the link and add a line about what it's about. Gemini can't read a reel from the link alone — there's no way to fetch someone else's reel content automatically — so what you type above is what actually gets processed.")
                 }
             }
             .navigationTitle("New Idea")

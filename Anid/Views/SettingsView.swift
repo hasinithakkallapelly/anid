@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SettingsKeys {
-    static let model = "claudeModel"
+    static let model = "geminiModel"
     static let knownPlaces = "knownRemindMePlaces"
 
     static func parsePlaces(_ raw: String) -> [String] {
@@ -13,7 +13,7 @@ enum SettingsKeys {
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(SettingsKeys.model) private var modelRaw = ClaudeModel.opus5.rawValue
+    @AppStorage(SettingsKeys.model) private var modelRaw = GeminiModel.flash.rawValue
     @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
 
     @State private var apiKeyInput = ""
@@ -24,7 +24,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    SecureField(hasStoredKey ? "•••••••••••• (saved)" : "sk-ant-...", text: $apiKeyInput)
+                    SecureField(hasStoredKey ? "•••••••••••• (saved)" : "AIza...", text: $apiKeyInput)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     Button("Save Key") { saveKey() }
@@ -33,21 +33,21 @@ struct SettingsView: View {
                         Button("Remove Key", role: .destructive) { removeKey() }
                     }
                 } header: {
-                    Text("Claude API Key")
+                    Text("Gemini API Key")
                 } footer: {
-                    Text("Get a key at console.anthropic.com → API Keys. Usage is billed per token by Anthropic — typically a few cents per idea processed. The key is stored in the Keychain and only ever sent to api.anthropic.com.")
+                    Text("Get a free key at aistudio.google.com → Get API key. No credit card required, and the free tier (about 1,500 requests/day) won't be hit by personal use. The key is stored in the Keychain and only ever sent to generativelanguage.googleapis.com.")
                 }
 
                 Section {
                     Picker("Model", selection: $modelRaw) {
-                        ForEach(ClaudeModel.allCases) { model in
+                        ForEach(GeminiModel.allCases) { model in
                             Text(model.displayName).tag(model.rawValue)
                         }
                     }
                 } header: {
                     Text("Model")
                 } footer: {
-                    Text("Opus 5 gives the most thorough breakdowns. Sonnet 5 or Haiku 4.5 cost less if you're processing a lot of ideas.")
+                    Text("Both are free. Flash gives more thorough breakdowns; Flash-Lite responds faster and uses less of your daily free quota.")
                 }
 
                 Section {
@@ -69,7 +69,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Your Remind Me Places")
                 } footer: {
-                    Text("Comma-separated names of the places you've already saved in Remind Me — spelled exactly as they are there. Anid can't read Remind Me's place list directly, so when Claude thinks a step belongs at a place (like a laptop task → \"Room\") it can only pick from names you list here, and Remind Me matches reminders to real places by exact name.")
+                    Text("Comma-separated names of the places you've already saved in Remind Me — spelled exactly as they are there. Anid can't read Remind Me's place list directly, so when Gemini thinks a step belongs at a place (like a laptop task → \"Room\") it can only pick from names you list here, and Remind Me matches reminders to real places by exact name.")
                 }
             }
             .navigationTitle("Settings")

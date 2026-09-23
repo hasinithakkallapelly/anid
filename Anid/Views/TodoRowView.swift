@@ -34,9 +34,9 @@ struct TodoRowView: View {
     }
 }
 
-/// Lets the user confirm or override how Claude classified a step: fire at
+/// Lets the user confirm or override how Gemini classified a step: fire at
 /// a place (geofence, in Remind Me), fire at a time, or no reminder trigger
-/// at all — just a plain step. Claude's guess pre-fills this but the user
+/// at all — just a plain step. Gemini's guess pre-fills this but the user
 /// has the final say, since Anid can't verify a suggested place actually
 /// exists in Remind Me.
 private struct TriggerControl: View {

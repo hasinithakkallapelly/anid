@@ -1,11 +1,11 @@
 import Foundation
 import Security
 
-/// Stores the Anthropic API key in the Keychain rather than UserDefaults —
+/// Stores the Gemini API key in the Keychain rather than UserDefaults —
 /// UserDefaults-backed values sit in an unencrypted plist on disk.
 enum KeychainService {
-    private static let service = "com.hasini.anid.anthropic-api-key"
-    private static let account = "anthropic"
+    private static let service = "com.hasini.anid.gemini-api-key"
+    private static let account = "gemini"
 
     static func save(apiKey: String) {
         let data = Data(apiKey.utf8)
