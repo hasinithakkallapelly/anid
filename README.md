@@ -30,11 +30,21 @@ action list, then send selected steps to your
 
 Anid originally called the Claude API, but that needs a paid Anthropic
 account with credits loaded — there's no free tier. Google's Gemini API has
-a genuinely free tier (no credit card, no expiry, roughly 1,500 requests/day
-as of writing — see [ai.google.dev](https://ai.google.dev)), which fits a
-personal, low-volume app like this one far better. If that ever changes, or
-you'd rather run something fully offline, two other free paths worth
-knowing about:
+a genuinely free tier (no credit card, no expiry), which fits a personal,
+low-volume app like this one far better.
+
+**Google's free-tier caps and model names shift more than you'd expect** —
+this app already got bitten once by a model ID (`gemini-2.5-flash`) getting
+retired for new API keys. `GeminiModel` in `GeminiService.swift` is where
+the current model IDs live; if a request ever 404s with a "no longer
+available" message, that error names the replacement model to swap in. As
+of writing, `gemini-3.5-flash-lite` (the default) gets roughly 500 free
+requests/day and `gemini-3.8-flash` gets roughly 20/day — check
+[ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing)
+for the current numbers rather than trusting this file.
+
+If the free tier ever stops working for you, or you'd rather run something
+fully offline, two other free paths worth knowing about:
 - **Groq** (free tier, open-weight models like Llama) — similar shape to
   this integration, just a different endpoint/auth/schema.
 - **Apple's on-device Foundation Models framework** — zero network calls,

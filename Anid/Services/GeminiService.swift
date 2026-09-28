@@ -1,19 +1,23 @@
 import Foundation
 
 /// Models available for breaking down an idea, via Google's Gemini API free
-/// tier (no card, no expiry, ~1,500 requests/day as of writing). Both are
-/// free — Flash gives more thorough breakdowns, Flash-Lite responds faster
-/// and uses less of the daily quota.
+/// tier (no card, no expiry). Google's free-tier request caps and model
+/// lineup have both shifted before (this app has already been bitten once
+/// by a retired model ID) — as of writing, Flash-Lite gets ~500 free
+/// requests/day versus Flash's ~20/day, so Flash-Lite is the default
+/// despite Flash being the more capable model. If either ID ever 404s
+/// again with a "no longer available" message like Gemini did before,
+/// the error names the replacement — swap it in here.
 enum GeminiModel: String, CaseIterable, Identifiable {
-    case flash = "gemini-2.5-flash"
-    case flashLite = "gemini-2.5-flash-lite"
+    case flashLite = "gemini-3.5-flash-lite"
+    case flash = "gemini-3.8-flash"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .flash: return "Gemini 2.5 Flash (more thorough)"
-        case .flashLite: return "Gemini 2.5 Flash-Lite (fastest)"
+        case .flashLite: return "Gemini 3.5 Flash-Lite (default — ~500 free req/day)"
+        case .flash: return "Gemini 3.8 Flash (more thorough — ~20 free req/day)"
         }
     }
 }

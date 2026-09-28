@@ -5,7 +5,7 @@ struct IdeaDetailView: View {
     @Bindable var idea: Idea
     @Environment(\.modelContext) private var modelContext
 
-    @AppStorage(SettingsKeys.model) private var modelRaw = GeminiModel.flash.rawValue
+    @AppStorage(SettingsKeys.model) private var modelRaw = GeminiModel.flashLite.rawValue
     @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
     @State private var isProcessing = false
     @State private var isSending = false
@@ -14,7 +14,7 @@ struct IdeaDetailView: View {
     @State private var isPresentingSettings = false
 
     private var selectedModel: GeminiModel {
-        GeminiModel(rawValue: modelRaw) ?? .flash
+        GeminiModel(rawValue: modelRaw) ?? .flashLite
     }
 
     private var hasAPIKey: Bool {

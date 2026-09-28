@@ -13,7 +13,7 @@ enum SettingsKeys {
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(SettingsKeys.model) private var modelRaw = GeminiModel.flash.rawValue
+    @AppStorage(SettingsKeys.model) private var modelRaw = GeminiModel.flashLite.rawValue
     @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
 
     @State private var apiKeyInput = ""
@@ -35,7 +35,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Gemini API Key")
                 } footer: {
-                    Text("Get a free key at aistudio.google.com → Get API key. No credit card required, and the free tier (about 1,500 requests/day) won't be hit by personal use. The key is stored in the Keychain and only ever sent to generativelanguage.googleapis.com.")
+                    Text("Get a free key at aistudio.google.com → Get API key. No credit card required. Free daily request caps vary by model (see below) and Google changes them without much notice, but personal use is unlikely to hit them. The key is stored in the Keychain and only ever sent to generativelanguage.googleapis.com.")
                 }
 
                 Section {
@@ -47,7 +47,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Model")
                 } footer: {
-                    Text("Both are free. Flash gives more thorough breakdowns; Flash-Lite responds faster and uses less of your daily free quota.")
+                    Text("Both are free. Flash-Lite has a much higher free daily request cap, so it's the safer default for everyday use; Flash gives more thorough breakdowns but its free tier runs out much faster. Google has changed these limits and model names before without much warning — if you ever see a \"model no longer available\" error, that error message names the replacement.")
                 }
 
                 Section {
