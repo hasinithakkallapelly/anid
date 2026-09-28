@@ -28,7 +28,7 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     Button("Save Key") { saveKey() }
-                        .disabled(apiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if hasStoredKey {
                         Button("Remove Key", role: .destructive) { removeKey() }
                     }
@@ -87,7 +87,7 @@ struct SettingsView: View {
     }
 
     private func saveKey() {
-        KeychainService.save(apiKey: apiKeyInput.trimmingCharacters(in: .whitespaces))
+        KeychainService.save(apiKey: apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines))
         apiKeyInput = ""
         hasStoredKey = true
     }
