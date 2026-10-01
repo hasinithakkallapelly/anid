@@ -5,6 +5,18 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+# Explicit so the runnable app scheme always exists. Without this Xcode can
+# end up with only the AnidShare extension scheme, which can't run on its own.
+schemes:
+  Anid:
+    build:
+      targets:
+        Anid: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
 targets:
   Anid:
     type: application
