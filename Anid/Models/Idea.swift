@@ -15,7 +15,7 @@ final class Idea {
     var statusRaw: String
     var summary: String?
 
-    /// Filename (relative to the app's Documents/Videos folder) of a video
+    /// Filename (relative to the shared App Group's Videos folder) of a video
     /// attached at capture time, e.g. a reel saved from Instagram and
     /// picked from Photos. When set, Gemini analyzes the actual video
     /// content instead of only the typed text.
@@ -29,6 +29,15 @@ final class Idea {
     var geminiFileMimeType: String?
     var geminiFileExpiresAt: Date?
 
+    var goal: Goal?
+
+    /// What the reel assumes you already know or have, from the breakdown.
+    var prerequisites: [String] = []
+
+    /// How this idea moves the linked goal forward. Only set when the idea
+    /// had a goal at breakdown time.
+    var goalConnection: String?
+
     @Relationship(deleteRule: .cascade, inverse: \TodoItem.idea)
     var todoItems: [TodoItem] = []
 
@@ -40,7 +49,13 @@ final class Idea {
         set { statusRaw = newValue.rawValue }
     }
 
-    init(id: UUID = UUID(), rawText: String, sourceURLString: String? = nil, localVideoFilename: String? = nil) {
+    init(
+        id: UUID = UUID(),
+        rawText: String,
+        sourceURLString: String? = nil,
+        localVideoFilename: String? = nil,
+        goal: Goal? = nil
+    ) {
         self.id = id
         self.rawText = rawText
         self.sourceURLString = sourceURLString
@@ -48,5 +63,6 @@ final class Idea {
         self.statusRaw = IdeaStatus.inbox.rawValue
         self.summary = nil
         self.localVideoFilename = localVideoFilename
+        self.goal = goal
     }
 }

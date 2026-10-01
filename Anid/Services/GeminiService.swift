@@ -24,6 +24,8 @@ enum GeminiModel: String, CaseIterable, Identifiable {
 
 struct IdeaBreakdown {
     let summary: String
+    let goalConnection: String?
+    let prerequisites: [String]
     let todoItems: [TodoDraft]
 
     struct TodoDraft {
@@ -110,9 +112,15 @@ enum GeminiService {
             let isoFormatter = ISO8601DateFormatter()
             let todoItems = parsed.todoItems.map { item -> IdeaBreakdown.TodoDraft in
                 let due = item.dueDate.flatMap { isoFormatter.date(from: $0) }
-                return IdeaBreakdown.TodoDraft(text: item.text, notes: item.notes, dueDate: due, placeName: item.placeName)
+                return IdeaBreakdown.TodoDraft(text: item.text, notes: item.details, dueDate: due, placeName: item.placeName)
             }
-            return IdeaBreakdown(summary: parsed.summary, todoItems: todoItems)
+            let goalConnection = parsed.goalConnection?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return IdeaBreakdown(
+                summary: parsed.summary,
+                goalConnection: (goalConnection?.isEmpty ?? true) ? nil : goalConnection,
+                prerequisites: (parsed.prerequisites ?? []).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty },
+                todoItems: todoItems
+            )
         } catch {
             throw GeminiServiceError.decodingFailed(error.localizedDescription)
         }
@@ -189,19 +197,40 @@ enum GeminiService {
         return ["fileData": ["fileUri": videoFile.uri, "mimeType": videoFile.mimeType]]
     }
 
+    /// The user's goal, if this idea is linked to one — shared by the
+    /// breakdown and chat so both pitch advice at the same target.
+    private static func goalContext(for idea: Idea) -> String? {
+        guard let goal = idea.goal else { return nil }
+        var text = "The user's goal this is meant to serve: \(goal.title)"
+        if let details = goal.details?.trimmingCharacters(in: .whitespacesAndNewlines), !details.isEmpty {
+            text += "\nMore about that goal (their words): \(details)"
+        }
+        return text
+    }
+
     private static func breakdownRequestBody(idea: Idea, knownPlaces: [String], videoFile: GeminiUploadedFile?) -> [String: Any] {
         let today = ISO8601DateFormatter().string(from: Date())
-        var userContent = "Today's date: \(today)\n\nIdea / note:\n\(idea.rawText)"
+        var userContent = "Today's date: \(today)"
+        if idea.rawText.isEmpty {
+            userContent += "\n\nThe user didn't type a note — work from the video alone."
+        } else {
+            userContent += "\n\nUser's note:\n\(idea.rawText)"
+        }
         if let link = idea.sourceURLString, !link.isEmpty {
-            userContent += "\n\nSource link: \(link)"
+            userContent += "\n\nSource link (for reference only — you can't open it): \(link)"
         }
         if videoFile != nil {
-            userContent += "\n\nA video is attached — base the breakdown on what's actually shown and said in it, not just the text above."
+            userContent += "\n\nThe reel's video is attached — watch and listen to it. Base everything on what's actually shown and said."
+        }
+        if let goal = goalContext(for: idea) {
+            userContent += "\n\n\(goal)"
+        } else {
+            userContent += "\n\nNo goal is linked, so set goalConnection to null and infer the most likely reason someone saves a reel like this."
         }
         if knownPlaces.isEmpty {
-            userContent += "\n\nThe user hasn't listed any saved Remind Me places yet, so never set placeName — leave every step's placeName null."
+            userContent += "\n\nThe user hasn't listed any saved Remind Me places, so leave every step's placeName null."
         } else {
-            userContent += "\n\nThe user's saved Remind Me places: \(knownPlaces.joined(separator: ", ")). Only use one of these exact names for placeName — never invent a new one."
+            userContent += "\n\nThe user's saved Remind Me places: \(knownPlaces.joined(separator: ", ")). Only use one of these exact names for placeName — never invent one."
         }
 
         var parts: [[String: Any]] = []
@@ -212,6 +241,9 @@ enum GeminiService {
 
         // Gemini's response_schema dialect uses uppercase type names and a
         // `nullable` flag rather than JSON Schema's `anyOf`-with-null.
+        // propertyOrdering makes the model write the goal link and
+        // prerequisites before the steps, so the steps build on them
+        // instead of the reasoning being bolted on after.
         let nullableString: [String: Any] = ["type": "STRING", "nullable": true]
 
         return [
@@ -222,27 +254,37 @@ enum GeminiService {
                 "parts": [["text": breakdownSystemPrompt]]
             ],
             "generationConfig": [
-                "maxOutputTokens": 4096,
+                // Detailed steps are long, and on Gemini's thinking models
+                // the reasoning counts against this limit too — too low and
+                // the response gets cut off mid-JSON (finishReason MAX_TOKENS).
+                "maxOutputTokens": 16384,
                 "responseMimeType": "application/json",
                 "responseSchema": [
                     "type": "OBJECT",
                     "properties": [
                         "summary": ["type": "STRING"],
+                        "goalConnection": nullableString,
+                        "prerequisites": [
+                            "type": "ARRAY",
+                            "items": ["type": "STRING"]
+                        ],
                         "todoItems": [
                             "type": "ARRAY",
                             "items": [
                                 "type": "OBJECT",
                                 "properties": [
                                     "text": ["type": "STRING"],
-                                    "notes": nullableString,
+                                    "details": ["type": "STRING"],
                                     "dueDate": nullableString,
                                     "placeName": nullableString
                                 ],
-                                "required": ["text", "notes", "dueDate", "placeName"]
+                                "required": ["text", "details", "dueDate", "placeName"],
+                                "propertyOrdering": ["text", "details", "dueDate", "placeName"]
                             ]
                         ]
                     ],
-                    "required": ["summary", "todoItems"]
+                    "required": ["summary", "goalConnection", "prerequisites", "todoItems"],
+                    "propertyOrdering": ["summary", "goalConnection", "prerequisites", "todoItems"]
                 ]
             ]
         ]
@@ -254,23 +296,34 @@ enum GeminiService {
         history: [ChatMessage],
         newMessage: String
     ) -> [String: Any] {
-        var contextText = "Idea / note:\n\(idea.rawText)"
+        var contextText = idea.rawText.isEmpty ? "The user saved a reel without a note." : "User's note:\n\(idea.rawText)"
         if let link = idea.sourceURLString, !link.isEmpty {
-            contextText += "\n\nSource link: \(link)"
+            contextText += "\n\nSource link (for reference only): \(link)"
         }
         if videoFile != nil {
-            contextText += "\n\nA video is attached to this idea — you can see and hear it directly."
+            contextText += "\n\nThe reel's video is attached — you can see and hear it directly."
+        }
+        if let goal = goalContext(for: idea) {
+            contextText += "\n\n\(goal)"
         }
         if let summary = idea.summary {
-            contextText += "\n\nSummary already given: \(summary)"
+            contextText += "\n\nSummary you already gave: \(summary)"
+        }
+        if let connection = idea.goalConnection {
+            contextText += "\n\nHow you said it connects to their goal: \(connection)"
+        }
+        if !idea.prerequisites.isEmpty {
+            contextText += "\n\nPrerequisites you listed:\n" + idea.prerequisites.map { "- \($0)" }.joined(separator: "\n")
         }
         if !idea.todoItems.isEmpty {
             let steps = idea.todoItems
                 .sorted { $0.createdAt < $1.createdAt }
                 .enumerated()
-                .map { index, item in "\(index + 1). \(item.text)" + (item.notes.map { " (\($0))" } ?? "") }
+                .map { index, item in
+                    "\(index + 1). \(item.text)" + (item.notes.map { "\n   \($0)" } ?? "")
+                }
                 .joined(separator: "\n")
-            contextText += "\n\nSteps already generated:\n\(steps)"
+            contextText += "\n\nSteps you already gave:\n\(steps)"
         }
 
         var firstTurnParts: [[String: Any]] = []
@@ -284,7 +337,7 @@ enum GeminiService {
         // normal back-and-forth instead of one giant opening message.
         contents.append([
             "role": "model",
-            "parts": [["text": "Got it — I have the idea, its summary, and the steps. What would you like to go over?"]]
+            "parts": [["text": "Got it — I have the reel, your goal, and the plan. What do you want to dig into?"]]
         ])
 
         for message in history {
@@ -295,58 +348,78 @@ enum GeminiService {
         return [
             "contents": contents,
             "systemInstruction": ["parts": [["text": chatSystemPrompt]]],
-            "generationConfig": ["maxOutputTokens": 2048]
+            "generationConfig": ["maxOutputTokens": 8192]
         ]
     }
 
     private static let breakdownSystemPrompt = """
-    You turn a quickly captured idea — often a note about a social media reel, \
-    a skill, tool, or technique the user wants to learn or do — into a short, \
-    concrete action plan.
+    You're a learning coach. The user saves reels about things they want to \
+    learn or do, then never gets back to them. Your job is to turn one saved \
+    reel into a plan they will actually follow — one that gets them closer \
+    to what they're really after, not just a recap of the reel.
 
-    Rules:
-    - Read the raw text (and source link, if present) as the user's own note \
-    about what they want to learn, try, or remember to do. If it names \
-    something you recognize (a specific tool, skill, technique, or product), \
-    use what you actually know about it to give real, specific guidance. If \
-    it's vague, make reasonable assumptions and say so in the summary.
-    - If a video is attached, actually watch and listen to it — base the \
-    breakdown on what's really shown, said, and demonstrated, not just the \
-    typed text.
-    - "summary" is 1-3 sentences: what this idea is and why it's worth doing.
-    - "todoItems" is 3-7 concrete, ordered action steps — not vague advice. \
-    E.g. "Read the official docs at X" or "Install X and run the quickstart" \
-    rather than "learn more about X".
-    - Each step gets at most one reminder trigger: either a dueDate (time) \
-    or a placeName (place) — never both, and most steps need neither.
-    - Set placeName only when the step is naturally tied to being physically \
-    somewhere specific — e.g. a step that needs a laptop/desk setup fits a \
-    "Room" or "Office" place; a step that needs gym equipment fits "Gym". \
-    Only use one of the user's listed places (given below), matched exactly; \
-    if none of their places fit the step, leave placeName null rather than \
-    inventing one.
-    - Set a dueDate instead when the note implies real urgency or a specific \
-    timeframe (e.g. "this weekend", "before Friday") and the step isn't \
-    place-bound. Most ideas don't need an artificial deadline — leave it \
-    null unless the timeframe is actually implied.
-    - dueDate, when set, must be a full ISO 8601 date-time string, computed \
-    relative to today's date given above.
-    - notes may add one short clarifying detail per step (a link, a command, \
-    a tip); leave it null if there's nothing to add.
-    - Respond with only the JSON object described by the response schema — \
-    no surrounding prose.
+    How to think about it:
+    - First work out what the reel actually teaches or shows. If a video is \
+    attached, watch and listen to it and use its specifics (exact tools, \
+    commands, settings, ingredients, techniques, numbers). If the note names \
+    something you recognize, use what you really know about it. If you're \
+    unsure of a detail, say so rather than inventing one.
+    - Then work out the bigger thing the user is trying to get to. If a goal \
+    is given, that's it. If not, infer the most likely one.
+    - Reels skip the foundations and assume the viewer already has them. \
+    Identify what this reel assumes — knowledge, skills, tools, accounts, \
+    setup — and list it in "prerequisites". Pitch these for someone who may \
+    be earlier on than the reel assumes; over-listing a genuinely \
+    foundational item is better than skipping it.
+    - The steps are a learning path, in order: close any prerequisite gaps \
+    first, then do the core of what the reel shows, then practice it on \
+    something real, then check the result, then one step that extends it \
+    toward the goal. Steps should be small enough to start today.
+
+    Fields:
+    - "summary": 2-3 sentences — what the reel teaches and why it's useful.
+    - "goalConnection": when a goal is given, 1-2 sentences on how this reel \
+    moves them toward it. If it's only loosely related, say that plainly \
+    instead of overselling it. null when no goal is given.
+    - "prerequisites": 2-6 short items, e.g. "Comfortable with basic Python \
+    syntax (variables, loops)" or "A free GitHub account". Each should be \
+    specific enough that the user can tell whether they already have it.
+    - "todoItems": 4-10 steps in learning-path order.
+      - "text": a short, specific action that starts with a verb, e.g. \
+    "Install Obsidian and create a vault for your notes" — not "Learn about \
+    Obsidian".
+      - "details": the real content of the step, 3-6 sentences. Say exactly \
+    what to do (concrete commands, settings, menu paths, examples, amounts), \
+    why it matters for the goal, how they'll know it's done, and one common \
+    mistake or tip. Write it so someone could follow it without rewatching \
+    the reel. Never leave this vague or empty.
+    - Each step gets at most one reminder trigger: "dueDate" (time) or \
+    "placeName" (place) — never both, and most steps need neither.
+    - Set placeName only when the step naturally happens somewhere \
+    specific — a step needing a laptop or desk fits "Room" or "Office"; one \
+    needing gym equipment fits "Gym". Only use one of the user's listed \
+    places, matched exactly; if none fit, leave it null.
+    - Set dueDate only when the note implies a real deadline or timeframe \
+    ("this weekend", "before Friday"). Otherwise null. When set, it must be \
+    a full ISO 8601 date-time computed from today's date.
+
+    Respond with only the JSON object described by the response schema.
     """
 
     private static let chatSystemPrompt = """
-    You're helping the user follow through on an idea they captured in a \
-    note-taking app, after already giving them a summary and a list of \
-    concrete action steps. Keep helping conversationally now: answer \
-    follow-up questions, go deeper on a step, troubleshoot problems they \
-    hit, or suggest refinements. If a video was attached to the idea, you \
-    can see and hear it directly — refer to specifics from it (what's \
-    shown, what's said, on-screen text) rather than speaking in \
-    generalities. Be concise and concrete; this is a chat, not another \
-    formal breakdown.
+    You're a learning coach helping the user follow through on a reel they \
+    saved, after you've already given them prerequisites and a step-by-step \
+    plan toward their goal. Now help them actually do it: explain a step in \
+    more depth, teach a prerequisite they're missing, troubleshoot what went \
+    wrong, adjust the plan to their level, or tell them what to do next.
+
+    - If a video is attached, refer to its specifics (what's shown, said, on \
+    screen) rather than speaking in generalities.
+    - When they're missing a prerequisite, teach it — start simple, use a \
+    concrete example, then connect it back to the step it unblocks.
+    - Prefer one clear next action over a list of options.
+    - Keep replies focused and readable on a phone: short paragraphs, \
+    numbered steps when order matters, no walls of text.
     """
 
     private struct GenerateContentResponse: Decodable {
@@ -370,10 +443,12 @@ enum GeminiService {
 
     private struct BreakdownJSON: Decodable {
         let summary: String
+        let goalConnection: String?
+        let prerequisites: [String]?
         let todoItems: [TodoDraftJSON]
         struct TodoDraftJSON: Decodable {
             let text: String
-            let notes: String?
+            let details: String?
             let dueDate: String?
             let placeName: String?
         }

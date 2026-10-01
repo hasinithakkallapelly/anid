@@ -23,9 +23,9 @@ struct IdeaChatView: View {
         VStack(spacing: 0) {
             if sortedMessages.isEmpty {
                 ContentUnavailableView(
-                    "Ask about this idea",
+                    "Stuck on something?",
                     systemImage: "bubble.left.and.bubble.right",
-                    description: Text("Go deeper on a step, troubleshoot, or ask for more detail.")
+                    description: Text("Try \"Explain step 2 like I'm new to this\", \"Teach me the first prerequisite\", or \"I did step 3 — what's next?\"")
                 )
                 .frame(maxHeight: .infinity)
             } else {

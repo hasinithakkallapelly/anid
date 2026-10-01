@@ -1,9 +1,12 @@
 import SwiftUI
 
 struct ShareComposeView: View {
-    @State private var note = ""
-    let onSave: (String) -> Void
+    let goals: [Goal]
+    let onSave: (String, Goal?) -> Void
     let onCancel: () -> Void
+
+    @State private var note = ""
+    @State private var selectedGoal: Goal?
 
     var body: some View {
         NavigationStack {
@@ -16,6 +19,11 @@ struct ShareComposeView: View {
                     TextField("What's this about?", text: $note, axis: .vertical)
                         .lineLimit(1...6)
                 }
+                if !goals.isEmpty {
+                    Section {
+                        GoalPicker(goals: goals, selection: $selectedGoal)
+                    }
+                }
             }
             .navigationTitle("Save to Anid")
             .navigationBarTitleDisplayMode(.inline)
@@ -25,7 +33,7 @@ struct ShareComposeView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(note.trimmingCharacters(in: .whitespacesAndNewlines))
+                        onSave(note.trimmingCharacters(in: .whitespacesAndNewlines), selectedGoal)
                     }
                 }
             }

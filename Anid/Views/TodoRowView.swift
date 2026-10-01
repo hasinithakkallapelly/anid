@@ -2,100 +2,108 @@ import SwiftUI
 
 struct TodoRowView: View {
     @Bindable var item: TodoItem
+    let number: Int
     let isSelected: Bool
     let onToggleSelect: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             Button(action: onToggleSelect) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
                     .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
             }
-            .buttonStyle(.plain)
+            // .borderless so taps on the row's other controls (the reminder
+            // menu) don't also toggle selection — List rows otherwise treat
+            // the whole row as one big button.
+            .buttonStyle(.borderless)
             .disabled(item.isSentToRemindMe)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.text)
-                if let notes = item.notes, !notes.isEmpty {
-                    Text(notes)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(number). \(item.text)")
+                    .font(.headline)
+
+                if let details = item.notes, !details.isEmpty {
+                    Text(details)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
+
                 if item.isSentToRemindMe {
                     Label("Sent to Remind Me", systemImage: "checkmark.seal")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.green)
                 } else {
-                    TriggerControl(item: item)
+                    ReminderControl(item: item)
                 }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
     }
 }
 
-/// Lets the user confirm or override how Gemini classified a step: fire at
-/// a place (geofence, in Remind Me), fire at a time, or no reminder trigger
-/// at all — just a plain step. Gemini's guess pre-fills this but the user
-/// has the final say, since Anid can't verify a suggested place actually
-/// exists in Remind Me.
-private struct TriggerControl: View {
+/// A compact reminder setting per step: none, a time, or one of the user's
+/// Remind Me places. Gemini's guess pre-fills it, but the user has the
+/// final say, since Anid can't verify a suggested place exists in Remind Me.
+private struct ReminderControl: View {
     @Bindable var item: TodoItem
     @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
-    @State private var mode: TriggerMode
-
-    private enum TriggerMode: String, CaseIterable {
-        case none = "None"
-        case time = "Time"
-        case place = "Place"
-    }
-
-    init(item: TodoItem) {
-        self.item = item
-        if item.placeName != nil {
-            _mode = State(initialValue: .place)
-        } else if item.dueDate != nil {
-            _mode = State(initialValue: .time)
-        } else {
-            _mode = State(initialValue: .none)
-        }
-    }
 
     private var knownPlaces: [String] {
         SettingsKeys.parsePlaces(knownPlacesRaw)
     }
 
+    private var label: String {
+        if let place = item.placeName { return "At \(place)" }
+        if let due = item.dueDate { return due.formatted(date: .abbreviated, time: .shortened) }
+        return "No reminder"
+    }
+
+    private var icon: String {
+        if item.placeName != nil { return "mappin.circle" }
+        if item.dueDate != nil { return "clock" }
+        return "bell.slash"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Picker("Trigger", selection: $mode) {
-                ForEach(TriggerMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
+            Menu {
+                Button {
+                    item.dueDate = nil
+                    item.placeName = nil
+                } label: {
+                    Label("No reminder", systemImage: "bell.slash")
                 }
-            }
-            .pickerStyle(.segmented)
-            .font(.caption)
-            .onChange(of: mode) { _, newMode in
-                switch newMode {
-                case .none:
-                    item.dueDate = nil
+                Button {
                     item.placeName = nil
-                case .time:
-                    item.placeName = nil
-                    if item.dueDate == nil { item.dueDate = Date() }
-                case .place:
-                    item.dueDate = nil
-                    if item.placeName == nil || !knownPlaces.contains(item.placeName!) {
-                        item.placeName = knownPlaces.first
+                    item.dueDate = item.dueDate ?? Calendar.current.date(byAdding: .day, value: 1, to: Date())
+                } label: {
+                    Label("At a time", systemImage: "clock")
+                }
+                if knownPlaces.isEmpty {
+                    Text("Add Remind Me places in Settings for place reminders")
+                } else {
+                    Section("At a place") {
+                        ForEach(knownPlaces, id: \.self) { place in
+                            Button {
+                                item.dueDate = nil
+                                item.placeName = place
+                            } label: {
+                                Label(place, systemImage: "mappin.circle")
+                            }
+                        }
                     }
                 }
+            } label: {
+                Label(label, systemImage: icon)
+                    .font(.caption)
             }
+            .buttonStyle(.borderless)
 
-            switch mode {
-            case .none:
-                EmptyView()
-            case .time:
+            if item.dueDate != nil {
                 DatePicker(
-                    "",
+                    "Remind me at",
                     selection: Binding(
                         get: { item.dueDate ?? Date() },
                         set: { item.dueDate = $0 }
@@ -104,22 +112,6 @@ private struct TriggerControl: View {
                 )
                 .labelsHidden()
                 .datePickerStyle(.compact)
-            case .place:
-                if knownPlaces.isEmpty {
-                    Text("Add your Remind Me place names in Settings to use this.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Picker("Place", selection: Binding(
-                        get: { item.placeName ?? knownPlaces.first ?? "" },
-                        set: { item.placeName = $0 }
-                    )) {
-                        ForEach(knownPlaces, id: \.self) { place in
-                            Text(place).tag(place)
-                        }
-                    }
-                    .font(.caption)
-                }
             }
         }
     }

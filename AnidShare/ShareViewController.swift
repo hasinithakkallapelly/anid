@@ -9,6 +9,11 @@ import UniformTypeIdentifiers
 /// tiny SwiftUI compose screen to add an optional note before saving a new
 /// Idea straight into the same SwiftData store the main app reads.
 final class ShareViewController: UIViewController {
+    // One context for both reading goals and saving the idea — a Goal
+    // fetched from one context can't be linked to an Idea inserted into
+    // another.
+    private lazy var context = ModelContext(SharedModelContainer.make())
+
     override func viewDidLoad() {
         super.viewDidLoad()
         loadSharedVideo()
@@ -43,9 +48,11 @@ final class ShareViewController: UIViewController {
     }
 
     private func presentCompose(filename: String) {
+        let goals = (try? context.fetch(FetchDescriptor<Goal>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)]))) ?? []
         let compose = ShareComposeView(
-            onSave: { [weak self] note in
-                self?.save(note: note, filename: filename)
+            goals: goals,
+            onSave: { [weak self] note, goal in
+                self?.save(note: note, goal: goal, filename: filename)
             },
             onCancel: { [weak self] in
                 VideoStorage.delete(filename: filename)
@@ -60,9 +67,8 @@ final class ShareViewController: UIViewController {
         hosting.didMove(toParent: self)
     }
 
-    private func save(note: String, filename: String) {
-        let context = ModelContext(SharedModelContainer.make())
-        let idea = Idea(rawText: note, localVideoFilename: filename)
+    private func save(note: String, goal: Goal?, filename: String) {
+        let idea = Idea(rawText: note, localVideoFilename: filename, goal: goal)
         context.insert(idea)
         do {
             try context.save()

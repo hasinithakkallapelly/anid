@@ -45,8 +45,10 @@ targets:
       - path: Anid/Models/Idea.swift
       - path: Anid/Models/TodoItem.swift
       - path: Anid/Models/ChatMessage.swift
+      - path: Anid/Models/Goal.swift
       - path: Anid/Services/VideoStorage.swift
       - path: Anid/Services/SharedModelContainer.swift
+      - path: Anid/Views/GoalPicker.swift
     info:
       path: Generated/ShareInfo.plist
       properties:

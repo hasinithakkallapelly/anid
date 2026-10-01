@@ -4,11 +4,15 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 struct IdeaCaptureView: View {
+    var initialGoal: Goal?
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Goal.createdAt, order: .reverse) private var goals: [Goal]
 
     @State private var text = ""
     @State private var link = ""
+    @State private var selectedGoal: Goal?
     @FocusState private var isTextFocused: Bool
 
     @State private var pickedVideoItem: PhotosPickerItem?
@@ -56,6 +60,14 @@ struct IdeaCaptureView: View {
                 }
 
                 Section {
+                    GoalPicker(goals: goals, selection: $selectedGoal)
+                } footer: {
+                    if goals.isEmpty {
+                        Text("Add goals in the Goals tab to plan reels around what you're working toward.")
+                    }
+                }
+
+                Section {
                     TextField("https://instagram.com/reel/...", text: $link)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
@@ -77,7 +89,10 @@ struct IdeaCaptureView: View {
                         .disabled(!canSave)
                 }
             }
-            .onAppear { isTextFocused = true }
+            .onAppear {
+                selectedGoal = initialGoal
+                isTextFocused = true
+            }
             .onChange(of: pickedVideoItem) { _, newItem in
                 guard let newItem else { return }
                 Task { await importVideo(from: newItem) }
@@ -122,7 +137,8 @@ struct IdeaCaptureView: View {
         let idea = Idea(
             rawText: trimmedText,
             sourceURLString: trimmedLink.isEmpty ? nil : trimmedLink,
-            localVideoFilename: storedFilename
+            localVideoFilename: storedFilename,
+            goal: selectedGoal
         )
         modelContext.insert(idea)
         dismiss()
@@ -154,5 +170,5 @@ private struct TransferableVideo: Transferable {
 
 #Preview {
     IdeaCaptureView()
-        .modelContainer(for: [Idea.self, TodoItem.self, ChatMessage.self], inMemory: true)
+        .modelContainer(for: [Idea.self, TodoItem.self, ChatMessage.self, Goal.self], inMemory: true)
 }

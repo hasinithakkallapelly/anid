@@ -2,6 +2,17 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    var body: some View {
+        TabView {
+            IdeasListView()
+                .tabItem { Label("Ideas", systemImage: "lightbulb") }
+            GoalsListView()
+                .tabItem { Label("Goals", systemImage: "target") }
+        }
+    }
+}
+
+private struct IdeasListView: View {
     @Query(sort: \Idea.createdAt, order: .reverse) private var ideas: [Idea]
     @Environment(\.modelContext) private var modelContext
 
@@ -15,13 +26,13 @@ struct ContentView: View {
                     ContentUnavailableView(
                         "No ideas yet",
                         systemImage: "lightbulb",
-                        description: Text("Tap + to jot one down.")
+                        description: Text("Tap + to save a reel or jot down an idea.")
                     )
                 } else {
                     List {
                         ForEach(ideas) { idea in
                             NavigationLink(value: idea) {
-                                IdeaRow(idea: idea)
+                                IdeaRow(idea: idea, showsGoal: true)
                             }
                         }
                         .onDelete(perform: deleteIdeas)
@@ -59,33 +70,52 @@ struct ContentView: View {
 
     private func deleteIdeas(at offsets: IndexSet) {
         for index in offsets {
-            modelContext.delete(ideas[index])
+            let idea = ideas[index]
+            if let filename = idea.localVideoFilename {
+                VideoStorage.delete(filename: filename)
+            }
+            modelContext.delete(idea)
         }
     }
 }
 
-private struct IdeaRow: View {
+struct IdeaRow: View {
     let idea: Idea
+    var showsGoal = false
+
+    private var title: String {
+        if !idea.rawText.isEmpty { return idea.rawText }
+        if let summary = idea.summary { return summary }
+        return idea.localVideoFilename != nil ? "Saved reel" : "Untitled idea"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(idea.rawText)
+            Text(title)
                 .font(.body)
                 .lineLimit(2)
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 if idea.status == .processed {
+                    let done = idea.todoItems.filter(\.isSentToRemindMe).count
                     Label("\(idea.todoItems.count) steps", systemImage: "checklist")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if done > 0 {
+                        Text("\(done) sent")
+                    }
                 } else {
                     Label("Not broken down yet", systemImage: "circle.dashed")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                }
+                if idea.localVideoFilename != nil {
+                    Image(systemName: "video.fill")
                 }
                 Spacer()
                 Text(idea.createdAt, style: .relative)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            if showsGoal, let goal = idea.goal {
+                Label(goal.title, systemImage: "target")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tint)
             }
         }
         .padding(.vertical, 2)
@@ -94,5 +124,5 @@ private struct IdeaRow: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Idea.self, TodoItem.self, ChatMessage.self], inMemory: true)
+        .modelContainer(for: [Idea.self, TodoItem.self, ChatMessage.self, Goal.self], inMemory: true)
 }

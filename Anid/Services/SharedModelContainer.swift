@@ -17,7 +17,7 @@ enum SharedModelContainer {
     }
 
     static func make() -> ModelContainer {
-        let schema = Schema([Idea.self, TodoItem.self, ChatMessage.self])
+        let schema = Schema([Idea.self, TodoItem.self, ChatMessage.self, Goal.self])
         let storeURL = containerURL.appendingPathComponent("Anid.sqlite")
         let configuration = ModelConfiguration(schema: schema, url: storeURL)
         do {
