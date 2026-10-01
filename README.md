@@ -7,19 +7,27 @@ action list, then send selected steps to your
 
 ## How it works
 
-- **Capture**: tap `+`, type the idea (and optionally paste a reel/article
-  link), save. No network call, no waiting — this is the "quickly and
+- **Capture**: tap `+`, type the idea, optionally attach the reel's actual
+  video (picked from your Photos library) and/or paste a link for your own
+  reference, save. No network call at this step — this is the "quickly and
   easily" part, and it works with zero setup.
-- **Break down**: open a saved idea and tap "Break This Down". This sends
-  the idea's text (and link, if any) to the Gemini API, which returns a
-  short summary plus 3-7 concrete action steps. Each step gets at most one
-  reminder trigger, and Gemini picks which kind fits: a **due date** for
-  steps with real urgency ("finish this by the weekend"), or a **place**
-  for steps tied to being somewhere specific — a laptop-only step suggests
-  "Room", a step needing gym equipment suggests "Gym" — matched against the
-  place names you've listed in Settings. Most steps get neither and are
-  just plain checklist items. You can override any of Gemini's guesses
-  per-step before sending.
+- **Break down**: open a saved idea and tap "Break This Down". If a video
+  is attached, Anid uploads it to the Gemini Files API and Gemini genuinely
+  watches and listens to it — not just a guess from a typed caption. Either
+  way, Gemini returns a short summary plus 3-7 concrete action steps. Each
+  step gets at most one reminder trigger, and Gemini picks which kind fits:
+  a **due date** for steps with real urgency ("finish this by the
+  weekend"), or a **place** for steps tied to being somewhere specific — a
+  laptop-only step suggests "Room", a step needing gym equipment suggests
+  "Gym" — matched against the place names you've listed in Settings. Most
+  steps get neither and are just plain checklist items. You can override
+  any of Gemini's guesses per-step before sending.
+- **Chat about it**: once an idea has a summary, "Chat About This Idea"
+  opens a normal back-and-forth with Gemini about it — ask it to go deeper
+  on a step, troubleshoot something you got stuck on, or just talk through
+  the idea. The idea's text, summary, steps, and attached video (if any)
+  are resent as context on every message, since the API itself has no
+  memory between requests.
 - **Send to Remind Me**: pick which steps to send, tap the button. Anid
   hands them to Remind Me via a `remindme://` URL — see
   [`Docs/RemindMeIntegration.md`](Docs/RemindMeIntegration.md) for what that
@@ -62,20 +70,25 @@ to real places by exact name — a typo or a place you add later in Remind Me
 but forget to add here just means that step falls back to no trigger (or
 you can pick a different place manually on the step itself).
 
-## Important limitation: reels aren't read automatically
+## Important limitation: a pasted link alone still isn't content
 
 There's no public API for reading an arbitrary public Instagram reel's
-caption or transcript from just a link — Instagram doesn't expose one to
+video or caption from just a link — Instagram doesn't expose one to
 third-party apps, and scraping it would be fragile and against their terms.
-So pasting a reel link alone does **not** give Gemini anything to work
-with. The capture screen makes this explicit: paste the link *and* write a
-line or two about what the reel is about (its caption, or your own
-paraphrase) — that's the actual input Gemini reasons over.
+So pasting a reel link by itself still gives Gemini nothing to work with.
 
-If you want this to feel more automatic later, the natural next step is a
-Share Extension (share a reel from Instagram straight into Anid, capturing
-whatever caption text iOS's share sheet exposes) rather than trying to
-fetch reel content server-side.
+What does work: save the reel to your Photos library (Instagram's own
+"Save video" option on reels that allow it) and attach that video when
+capturing the idea in Anid — the capture screen has a video picker for
+exactly this. Gemini then genuinely analyzes the real video, not a
+paraphrase. If a reel can't be saved (creator disabled it), typing a note
+about what it's about is still a reasonable fallback, just a weaker one.
+
+A Share Extension (share a reel from Instagram straight into Anid, one tap
+instead of save-then-pick) would tighten this further, but isn't built yet
+— Instagram's share sheet typically hands other apps a link rather than
+the video file, so it likely wouldn't remove the save-to-Photos step
+anyway.
 
 ## Setup (you'll need a Mac with Xcode)
 
@@ -103,16 +116,20 @@ been built/run yet — same situation as the remind-me repo it talks to.
 Anid/
   AnidApp.swift              # App entry point, SwiftData container setup
   Models/
-    Idea.swift                # SwiftData model: raw text, link, status, summary
+    Idea.swift                # SwiftData model: raw text, link, video ref, status, summary
     TodoItem.swift             # SwiftData model: step text, notes, due date/place trigger
+    ChatMessage.swift          # SwiftData model: one chat turn (role, text)
   Services/
-    GeminiService.swift        # Gemini generateContent API client (raw HTTPS, no SDK)
+    GeminiService.swift        # Gemini generateContent API client (breakdown + chat, raw HTTPS)
+    GeminiFilesService.swift   # Gemini Files API client (resumable video upload)
+    VideoStorage.swift         # Persists a picked video into app storage
     KeychainService.swift      # Secure storage for the Gemini API key
     RemindMeBridge.swift       # Builds/opens the remindme:// handoff URL
   Views/
     ContentView.swift          # Idea list
-    IdeaCaptureView.swift      # Fast-capture sheet
-    IdeaDetailView.swift       # Breakdown + send-to-Remind-Me flow
+    IdeaCaptureView.swift      # Fast-capture sheet (text, video picker, link)
+    IdeaDetailView.swift       # Breakdown + chat entry point + send-to-Remind-Me flow
+    IdeaChatView.swift         # Per-idea chat thread
     TodoRowView.swift          # Per-step row (select + trigger: none/time/place)
     SettingsView.swift         # API key, model choice, known Remind Me places
 project.yml                    # XcodeGen spec to produce the .xcodeproj
@@ -122,11 +139,19 @@ Docs/
 
 ## Known limitations / next steps
 
-- No Share Extension yet — see "reels aren't read automatically" above.
+- No Share Extension yet — see "a pasted link alone still isn't content"
+  above; attaching a video means a manual save-to-Photos step first.
 - The Remind Me side of the integration isn't applied yet (it's a separate
   repo); Anid will report "Remind Me didn't open this link" until it is.
 - No retry/offline queue if a Gemini API call fails mid-flight — just tap
-  "Break This Down" again.
-- No editing of a step's text after breakdown (only its due date and
-  whether it's selected) — delete the idea and re-add for now if the
-  wording needs to change.
+  "Break This Down" (or resend the chat message) again.
+- No editing of a step's text after breakdown (only its due date/place
+  trigger and whether it's selected) — delete the idea and re-add for now
+  if the wording needs to change.
+- A chat conversation that continues more than 48 hours after the video
+  was uploaded will try to re-upload it automatically (Gemini Files API
+  uploads expire after 48 hours) — this should be transparent, but hasn't
+  been tested against an actual 48-hour-old upload.
+- Large videos take real time to upload before "Break This Down" or a chat
+  reply comes back — there's a distinct "Uploading video..." state, but no
+  progress percentage, just a spinner.

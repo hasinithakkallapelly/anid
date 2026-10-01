@@ -8,6 +8,7 @@ struct IdeaDetailView: View {
     @AppStorage(SettingsKeys.model) private var modelRaw = GeminiModel.flashLite.rawValue
     @AppStorage(SettingsKeys.knownPlaces) private var knownPlacesRaw = ""
     @State private var isProcessing = false
+    @State private var isUploadingVideo = false
     @State private var isSending = false
     @State private var errorMessage: String?
     @State private var selectedItemIDs: Set<UUID> = []
@@ -29,6 +30,11 @@ struct IdeaDetailView: View {
         Form {
             Section("Idea") {
                 Text(idea.rawText)
+                if idea.localVideoFilename != nil {
+                    Label("Video attached", systemImage: "video.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let link = idea.sourceURLString, let url = URL(string: link) {
                     Link(link, destination: url)
                         .font(.caption)
@@ -42,12 +48,28 @@ struct IdeaDetailView: View {
                 }
             }
 
+            if !idea.todoItems.isEmpty || idea.summary != nil {
+                Section {
+                    NavigationLink {
+                        IdeaChatView(idea: idea)
+                    } label: {
+                        Label("Chat About This Idea", systemImage: "bubble.left.and.bubble.right")
+                    }
+                    .disabled(!hasAPIKey)
+                }
+            }
+
             if idea.todoItems.isEmpty {
                 Section {
                     Button {
                         Task { await breakDown() }
                     } label: {
-                        if isProcessing {
+                        if isUploadingVideo {
+                            HStack {
+                                ProgressView()
+                                Text("Uploading video...")
+                            }
+                        } else if isProcessing {
                             HStack {
                                 ProgressView()
                                 Text("Thinking...")
@@ -56,7 +78,7 @@ struct IdeaDetailView: View {
                             Label("Break This Down", systemImage: "sparkles")
                         }
                     }
-                    .disabled(isProcessing || !hasAPIKey)
+                    .disabled(isProcessing || isUploadingVideo || !hasAPIKey)
 
                     if !hasAPIKey {
                         Button("Add a Gemini API key in Settings") {
@@ -127,15 +149,27 @@ struct IdeaDetailView: View {
             errorMessage = GeminiServiceError.missingAPIKey.localizedDescription
             return
         }
-        isProcessing = true
-        defer { isProcessing = false }
         do {
+            defer {
+                isUploadingVideo = false
+                isProcessing = false
+            }
+
+            var videoFile: GeminiUploadedFile?
+            if idea.localVideoFilename != nil {
+                isUploadingVideo = true
+                videoFile = try await GeminiService.ensureUploadedVideo(for: idea, apiKey: apiKey)
+                isUploadingVideo = false
+            }
+            isProcessing = true
+
             let knownPlaces = SettingsKeys.parsePlaces(knownPlacesRaw)
             let result = try await GeminiService.breakDown(
                 idea: idea,
                 apiKey: apiKey,
                 model: selectedModel,
-                knownPlaces: knownPlaces
+                knownPlaces: knownPlaces,
+                videoFile: videoFile
             )
             idea.summary = result.summary
             for draft in result.todoItems {

@@ -94,5 +94,5 @@ private struct IdeaRow: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Idea.self, TodoItem.self], inMemory: true)
+        .modelContainer(for: [Idea.self, TodoItem.self, ChatMessage.self], inMemory: true)
 }
