@@ -50,8 +50,8 @@ struct IdeaCaptureView: View {
                 }
 
                 Section("What's the idea?") {
-                    TextEditor(text: $text)
-                        .frame(minHeight: 100)
+                    TextField("A quick note...", text: $text, axis: .vertical)
+                        .lineLimit(1...5)
                         .focused($isTextFocused)
                 }
 

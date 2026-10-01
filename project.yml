@@ -27,3 +27,45 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         GENERATE_INFOPLIST_FILE: YES
+    entitlements:
+      path: Anid/Anid.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.hasini.anid
+    dependencies:
+      - target: AnidShare
+        embed: true
+
+  AnidShare:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AnidShare
+      - path: Anid/Models/Idea.swift
+      - path: Anid/Models/TodoItem.swift
+      - path: Anid/Models/ChatMessage.swift
+      - path: Anid/Services/VideoStorage.swift
+      - path: Anid/Services/SharedModelContainer.swift
+    info:
+      path: Generated/ShareInfo.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsMovieWithMaxCount: 1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hasini.anid.share
+        PRODUCT_NAME: AnidShare
+        INFOPLIST_KEY_CFBundleDisplayName: Anid
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+    entitlements:
+      path: AnidShare/AnidShare.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.hasini.anid

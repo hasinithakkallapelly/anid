@@ -1,14 +1,16 @@
 import Foundation
 
-/// Persists a picked video into the app's own Documents folder, since a
-/// PhotosPicker only hands us a temporary file that disappears once the
-/// picker closes. Idea.localVideoFilename stores just the filename this
-/// returns; resolve it back to a full path with `url(for:)` whenever it's
-/// needed (uploading to Gemini, letting the user re-watch it, etc).
+/// Persists a picked video into the App Group's shared container, since a
+/// PhotosPicker (or the Share Extension's NSItemProvider) only hands us a
+/// temporary file that disappears once the picker/extension closes — and
+/// the Share Extension runs as a separate process that can't see the main
+/// app's private Documents folder at all, only the shared App Group.
+/// Idea.localVideoFilename stores just the filename this returns; resolve
+/// it back to a full path with `url(for:)` whenever it's needed (uploading
+/// to Gemini, letting the user re-watch it, etc).
 enum VideoStorage {
     private static var directory: URL {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let videos = documents.appendingPathComponent("Videos", isDirectory: true)
+        let videos = SharedModelContainer.containerURL.appendingPathComponent("Videos", isDirectory: true)
         if !FileManager.default.fileExists(atPath: videos.path) {
             try? FileManager.default.createDirectory(at: videos, withIntermediateDirectories: true)
         }
