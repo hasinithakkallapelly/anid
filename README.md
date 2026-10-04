@@ -6,6 +6,10 @@ you need to know first, then detailed steps — and helps you follow through,
 with a chat for getting unstuck and reminders sent to your
 [Remind Me](https://github.com/hasinithakkallapelly/remind-me) app.
 
+> This repo also holds **Health Log**, a separate personal health-tracking
+> app (UTI / IBS symptoms, food, water, poop) — see
+> [`HealthLog/README.md`](HealthLog/README.md).
+
 ## How it works
 
 - **Capture**: tap `+`, type the idea, optionally attach the reel's actual
