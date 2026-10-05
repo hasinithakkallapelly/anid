@@ -9,3 +9,15 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# Secrets and signing files: never commit these
+.env
+.env.*
+*.p12
+*.p8
+*.pem
+*.key
+*.cer
+*.mobileprovision
+*.provisionprofile
+GoogleService-Info.plist
