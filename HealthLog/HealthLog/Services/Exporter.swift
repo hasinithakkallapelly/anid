@@ -143,6 +143,23 @@ enum Exporter {
             lines.append("")
         }
 
+        let foods = events.filter { $0.kind == .food }
+        if !foods.isEmpty {
+            lines.append("FOOD DIARY")
+            let byDay = Dictionary(grouping: foods) { Calendar.current.startOfDay(for: $0.timestamp) }
+            for (day, items) in byDay.sorted(by: { $0.key < $1.key }) {
+                lines.append(day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
+                for food in items.sorted(by: { $0.timestamp < $1.timestamp }) {
+                    var line = "  \(timeFormatter.string(from: food.timestamp))"
+                    if let meal = food.meal { line += " \(meal.label):" }
+                    line += " \(food.title)"
+                    if !food.tags.isEmpty { line += " [\(food.tags.joined(separator: ", "))]" }
+                    lines.append(line)
+                }
+            }
+            lines.append("")
+        }
+
         lines.append("Full detail in the attached CSV files.")
         return lines.joined(separator: "\n")
     }
@@ -171,12 +188,13 @@ enum Exporter {
     }()
 
     private static func eventsCSV(_ events: [LogEvent]) -> String {
-        var rows = [["date", "time", "type", "item", "severity_1to5", "bristol_type", "tags", "details"]]
+        var rows = [["date", "time", "type", "meal", "item", "severity_1to5", "bristol_type", "tags", "details"]]
         for event in events {
             rows.append([
                 DayKey.string(for: event.timestamp),
                 timeFormatter.string(from: event.timestamp),
                 event.kind.rawValue,
+                event.meal?.rawValue ?? "",
                 event.title,
                 event.severity.map(String.init) ?? "",
                 event.bristol.map(String.init) ?? "",

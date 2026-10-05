@@ -29,6 +29,8 @@ struct RootView: View {
             TabView {
                 TodayView()
                     .tabItem { Label("Today", systemImage: "heart.text.square") }
+                FoodDiaryView()
+                    .tabItem { Label("Food", systemImage: "fork.knife") }
                 HistoryView()
                     .tabItem { Label("History", systemImage: "calendar") }
                 TrendsView()

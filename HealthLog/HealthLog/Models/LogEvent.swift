@@ -27,6 +27,23 @@ enum EventKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum Meal: String, Codable, CaseIterable, Identifiable {
+    case breakfast, lunch, dinner, snack, drink
+
+    var id: String { rawValue }
+    var label: String { rawValue.capitalized }
+
+    /// A starting guess from the time of day; the user can change it.
+    static func guess(for date: Date) -> Meal {
+        switch Calendar.current.component(.hour, from: date) {
+        case 5..<11: .breakfast
+        case 11..<16: .lunch
+        case 18..<23: .dinner
+        default: .snack
+        }
+    }
+}
+
 /// Anything that happens at a specific time during the day. One model for all
 /// kinds keeps the day timeline, history, and CSV export simple; fields that
 /// don't apply to a kind are just left empty.
@@ -45,6 +62,9 @@ final class LogEvent {
     var tags: [String]
     /// Medicine dose, or any extra free text.
     var detail: String
+    /// Meal.rawValue for food entries, nil otherwise. Optional so existing
+    /// data migrates automatically.
+    var mealRaw: String?
 
     init(
         kind: EventKind,
@@ -62,6 +82,12 @@ final class LogEvent {
         self.bristol = bristol
         self.tags = tags
         self.detail = detail
+        self.mealRaw = nil
+    }
+
+    var meal: Meal? {
+        get { mealRaw.flatMap(Meal.init(rawValue:)) }
+        set { mealRaw = newValue?.rawValue }
     }
 
     var kind: EventKind {

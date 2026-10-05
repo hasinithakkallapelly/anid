@@ -18,14 +18,20 @@ server, no network calls.
     Several at once (e.g. burning + urgency) with one severity 1–5.
   - **Poop** — Bristol stool type 1–7, plus urgent / straining / incomplete
     / painful / mucus / blood.
-  - **Food / drink** — what you had, tagged with common IBS triggers and
-    bladder irritants (dairy, onion/garlic, caffeine, alcohol, spicy,
-    fizzy, citrus…).
+  - **Food / drink** — what you had and which meal (breakfast, lunch,
+    dinner, snack, drink; guessed from the time), tagged with common IBS
+    triggers and bladder irritants (dairy, onion/garlic, caffeine, alcohol,
+    spicy, fizzy, citrus…). Foods you've had before show up as one-tap
+    suggestions that fill in the name *and* its tags.
   - **Medicine** — name + dose, with recently used ones one tap away.
   - **Note**.
 - **Red-flag warnings**: logging fever/chills, back or side pain, or blood
   in urine shows a "get seen today" banner (possible kidney infection);
   blood in poop shows a "tell a doctor" note (not a typical IBS symptom).
+
+**Food tab** — your whole food diary, grouped by day, with search (e.g.
+"pizza" or "dairy" to see every time you had it). `+` logs a meal from here
+too.
 
 **History tab** — every logged day with a one-line summary; tap to edit.
 
@@ -37,7 +43,7 @@ with/without averages, need ≥3 days on each side, and are shown as hints to
 test (cut it out for 2–3 weeks), not conclusions.
 
 **Export** (share icon on Today) — pick a date range, get a readable
-doctor summary (.txt) plus all data as two CSV spreadsheets. Doubles as your
+doctor summary (.txt, including a day-by-day food diary) plus all data as two CSV spreadsheets. Doubles as your
 backup.
 
 **Settings** — water goal, period tracking, your own symptoms, daily
@@ -86,6 +92,6 @@ HealthLog/
       AppLock.swift           # Face ID / passcode
       Settings.swift          # AppStorage keys
     Views/
-      TodayView.swift, DayView.swift, EventEditorView.swift,
+      TodayView.swift, DayView.swift, EventEditorView.swift, FoodDiaryView.swift,
       HistoryView.swift, TrendsView.swift, ExportView.swift, SettingsView.swift
 ```

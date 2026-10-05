@@ -17,6 +17,12 @@ struct EventEditorView: View {
         order: .reverse
     ) private var pastMedications: [LogEvent]
 
+    @Query(
+        filter: #Predicate<LogEvent> { $0.kindRaw == "food" },
+        sort: \LogEvent.timestamp,
+        order: .reverse
+    ) private var pastFoods: [LogEvent]
+
     @State private var timestamp: Date
     @State private var title: String
     @State private var severity: Int?
@@ -26,6 +32,9 @@ struct EventEditorView: View {
     /// New symptoms can be logged several at once (e.g. burning + urgency).
     @State private var selectedSymptoms: Set<String>
     @State private var newSymptom = ""
+    @State private var meal: Meal
+    /// Once the user picks a meal, stop re-guessing it from the time.
+    @State private var mealChosen: Bool
 
     init(kind: EventKind, event: LogEvent?, day: Date) {
         self.kind = kind
@@ -45,6 +54,8 @@ struct EventEditorView: View {
         _tags = State(initialValue: Set(event?.tags ?? []))
         _detail = State(initialValue: event?.detail ?? "")
         _selectedSymptoms = State(initialValue: event.map { [$0.title] } ?? [])
+        _meal = State(initialValue: event?.meal ?? Meal.guess(for: event?.timestamp ?? defaultTime))
+        _mealChosen = State(initialValue: event?.meal != nil)
     }
 
     private var customSymptoms: [String] { SettingsKeys.parseList(customSymptomsRaw) }
@@ -71,6 +82,9 @@ struct EventEditorView: View {
                 Section {
                     DatePicker("Time", selection: $timestamp, in: ...Date.now)
                 }
+            }
+            .onChange(of: timestamp) {
+                if kind == .food && !mealChosen { meal = Meal.guess(for: timestamp) }
             }
             .navigationTitle(event == nil ? "Log \(kind.label.lowercased())" : "Edit \(kind.label.lowercased())")
             .navigationBarTitleDisplayMode(.inline)
@@ -196,9 +210,55 @@ struct EventEditorView: View {
 
     // MARK: - Food
 
+    /// Past foods, newest first, one per name. While typing, only matches.
+    private var foodSuggestions: [LogEvent] {
+        let query = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var seen = Set<String>()
+        var result: [LogEvent] = []
+        for food in pastFoods where food.persistentModelID != event?.persistentModelID {
+            let key = food.title.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            if !query.isEmpty {
+                guard food.title.localizedCaseInsensitiveContains(query), key != query.lowercased() else { continue }
+            }
+            result.append(food)
+            if result.count == 10 { break }
+        }
+        return result
+    }
+
     @ViewBuilder private var foodFields: some View {
+        Section {
+            Picker("Meal", selection: Binding(get: { meal }, set: { meal = $0; mealChosen = true })) {
+                ForEach(Meal.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+        }
         Section("What did you eat or drink?") {
-            TextField("e.g. Paneer pizza and a Coke", text: $title, axis: .vertical)
+            TextField("e.g. Rice, dal and curd", text: $title, axis: .vertical)
+        }
+        if !foodSuggestions.isEmpty {
+            Section {
+                ForEach(foodSuggestions) { food in
+                    Button {
+                        title = food.title
+                        tags = Set(food.tags)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(food.title).foregroundStyle(Color.primary)
+                            if !food.tags.isEmpty {
+                                Text(food.tags.joined(separator: " · "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text(title.isEmpty ? "Had before" : "Matches")
+            } footer: {
+                Text("Tap to fill in the food and its tags.")
+            }
         }
         Section {
             TagGrid(options: Catalog.foodTags, selection: $tags, highlight: [])
@@ -284,6 +344,7 @@ struct EventEditorView: View {
         target.bristol = kind == .bowel ? bristol : nil
         target.tags = tags
         target.detail = detail
+        target.meal = kind == .food ? meal : nil
     }
 
     /// Keep tags in the catalog's order so exports read consistently.

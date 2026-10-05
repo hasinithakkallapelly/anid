@@ -156,6 +156,7 @@ struct EventRow: View {
             if let severity = event.severity { parts.append("pain \(severity)/5") }
             parts.append(contentsOf: event.tags)
         case .food:
+            if let meal = event.meal { parts.append(meal.label) }
             parts.append(contentsOf: event.tags)
         case .medication, .note:
             break
